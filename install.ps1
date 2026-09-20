@@ -154,10 +154,26 @@ $ud = (Get-SpOutput @('path', 'userdata')).Output
 if ([string]::IsNullOrWhiteSpace($ud) -or -not (Test-Path $ud)) { $ud = "$env:APPDATA\spicetify" }
 $script:UserDataPath = $ud
 
+function Invoke-PruneStaleExtensions {
+    # A dangling extension (config entry without the file) makes 'apply' report
+    # an error and can break runtime init so custom apps like Marketplace never load.
+    $extOut = (Get-SpOutput @('config', 'extensions')).Output
+    if ([string]::IsNullOrWhiteSpace($extOut) -or $extOut -eq 'none') { return }
+    $extDir = Join-Path $script:UserDataPath 'Extensions'
+    $names = $extOut -split '[\|\s;,]+' | Where-Object { $_ -ne '' -and $_ -ne 'none' }
+    foreach ($n in $names) {
+        if (-not (Test-Path -LiteralPath (Join-Path $extDir $n))) {
+            Write-Host "Removing stale extension '$n' (file is missing)..." -ForegroundColor Yellow
+            Invoke-Sp @('config', 'extensions', "$n-", '-q') | Out-Null
+        }
+    }
+}
+
 function Invoke-BackupApply {
     # Idempotent refresh: a previous run leaves Spotify patched, and a plain
     # 'backup' then refuses ("restore first then backup"). Restore pristine
     # files first in that case, then backup + apply as usual.
+    Invoke-PruneStaleExtensions
     $backupDir = Join-Path $script:UserDataPath 'Backup'
     if (Test-Path -LiteralPath $backupDir) {
         Write-Host 'Previous install detected, restoring pristine Spotify files...' -ForegroundColor Cyan
