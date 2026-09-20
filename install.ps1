@@ -45,14 +45,15 @@ function Invoke-Sp {
     $full = @()
     if ($script:UseBypass) { $full += '--bypass-admin' }
     $full += $SpArgs
-    # Capture stdout/stderr so it does NOT leak into the function's output stream
+    # Capture STDOUT so it does NOT leak into the function's output stream
     # (otherwise callers get an array instead of the exit code). Echo via Write-Host.
-    # NOTE: $ErrorActionPreference must be 'Continue' here, otherwise stderr lines
-    # from the native exe become terminating NativeCommandError under 'Stop'.
+    # NOTE: stderr is intentionally NOT merged (no 2>&1): unredirected stderr can never
+    # become a NativeCommandError, and spicetify's live progress stays visible.
+    # $ErrorActionPreference is still set to 'Continue' as a belt-and-braces guard.
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $output = (& $spicetifyExe @full 2>&1 | Out-String)
+        $output = (& $spicetifyExe @full | Out-String)
         $code = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $prevEAP
@@ -69,7 +70,7 @@ function Get-SpOutput {
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $out = (& $spicetifyExe @full 2>&1 | Out-String).Trim()
+        $out = (& $spicetifyExe @full | Out-String).Trim()
         $code = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $prevEAP
