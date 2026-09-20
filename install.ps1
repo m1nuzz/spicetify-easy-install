@@ -45,8 +45,12 @@ function Invoke-Sp {
     $full = @()
     if ($script:UseBypass) { $full += '--bypass-admin' }
     $full += $SpArgs
-    & $spicetifyExe @full
-    return $LASTEXITCODE
+    # Capture stdout/stderr so it does NOT leak into the function's output stream
+    # (otherwise callers get an array instead of the exit code). Echo via Write-Host.
+    $output = (& $spicetifyExe @full 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    if (-not [string]::IsNullOrWhiteSpace($output)) { Write-Host $output.TrimEnd() }
+    return $code
 }
 
 function Get-SpOutput {
