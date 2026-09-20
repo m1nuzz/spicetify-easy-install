@@ -179,7 +179,7 @@ function Invoke-BackupApply {
     # refuses with "stock state"/"mismatched" -- that is fine, backup below
     # will snapshot the current files (clearing the stale backup itself).
     $r = Get-SpOutput @('restore')
-    $nothingToRestore = ($r.ExitCode -ne 0) -and ($r.Output -match 'stock state|mismatched|no backup|nothing to restore|does not exist')
+    $nothingToRestore = ($r.ExitCode -ne 0) -and ($r.Output -match 'stock state|mismatched|no backup|nothing to restore|does not exist|haven.t backed up|not backed up')
     if ($r.ExitCode -ne 0 -and -not $nothingToRestore) { throw "spicetify restore failed with exit code $($r.ExitCode).`n$($r.Output)" }
     if ($r.ExitCode -eq 0) {
         Write-Host 'Previous install detected, restored pristine Spotify files.' -ForegroundColor Cyan
