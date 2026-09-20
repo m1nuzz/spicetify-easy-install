@@ -149,12 +149,33 @@ if (-not (Test-Path $spotifyExe) -and -not (Get-Command spotify -ErrorAction Sil
     Write-Host 'WARNING: Spotify.exe not found at %APPDATA%\Spotify. Install Spotify first, then re-run this script (backup/apply needs it).' -ForegroundColor Yellow
 }
 
+# --- Shared userdata path + idempotent backup/apply ---
+$ud = (Get-SpOutput @('path', 'userdata')).Output
+if ([string]::IsNullOrWhiteSpace($ud) -or -not (Test-Path $ud)) { $ud = "$env:APPDATA\spicetify" }
+$script:UserDataPath = $ud
+
+function Invoke-BackupApply {
+    # Idempotent refresh: a previous run leaves Spotify patched, and a plain
+    # 'backup' then refuses ("restore first then backup"). Restore pristine
+    # files first in that case, then backup + apply as usual.
+    $backupDir = Join-Path $script:UserDataPath 'Backup'
+    if (Test-Path -LiteralPath $backupDir) {
+        Write-Host 'Previous install detected, restoring pristine Spotify files...' -ForegroundColor Cyan
+        $code = Invoke-Sp @('restore')
+        if ($code -ne 0) { throw "spicetify restore failed with exit code $code." }
+    }
+    Write-Host 'Running backup...' -ForegroundColor Cyan
+    $code = Invoke-Sp @('backup')
+    if ($code -ne 0) { throw "spicetify backup failed with exit code $code." }
+    Write-Host 'Running apply...' -ForegroundColor Cyan
+    $code = Invoke-Sp @('apply')
+    if ($code -ne 0) { throw "spicetify apply failed with exit code $code." }
+}
+
 # --- Marketplace (latest, non-interactive) ---
 if (-not $NoMarketplace) {
     Write-Host 'Installing Marketplace (latest)...' -ForegroundColor Cyan
 
-    $ud = (Get-SpOutput @('path', 'userdata')).Output
-    if ([string]::IsNullOrWhiteSpace($ud) -or -not (Test-Path $ud)) { $ud = "$env:APPDATA\spicetify" }
     $marketApp = Join-Path $ud 'CustomApps\marketplace'
     $marketTheme = Join-Path $ud 'Themes\marketplace'
 
@@ -184,11 +205,7 @@ if (-not $NoMarketplace) {
         Write-Host "Keeping your current theme '$curTheme' (placeholder not forced)." -ForegroundColor Yellow
     }
 
-    Write-Host 'Running backup + apply...' -ForegroundColor Cyan
-    $code = Invoke-Sp @('backup')
-    if ($code -ne 0) { throw "spicetify backup failed with exit code $code." }
-    $code = Invoke-Sp @('apply')
-    if ($code -ne 0) { throw "spicetify apply failed with exit code $code." }
+    Invoke-BackupApply
 
     # Fix ownership/ACLs so a non-elevated Spotify can read files touched as admin.
     Repair-Permissions $ud
@@ -197,11 +214,7 @@ if (-not $NoMarketplace) {
 
     Write-Host 'Marketplace installed!' -ForegroundColor Green
 } else {
-    Write-Host 'Running backup + apply (no Marketplace)...' -ForegroundColor Cyan
-    $code = Invoke-Sp @('backup')
-    if ($code -ne 0) { throw "spicetify backup failed with exit code $code." }
-    $code = Invoke-Sp @('apply')
-    if ($code -ne 0) { throw "spicetify apply failed with exit code $code." }
+    Invoke-BackupApply
     Repair-Permissions "$env:APPDATA\Spotify"
 }
 
