@@ -174,11 +174,17 @@ function Invoke-BackupApply {
     # 'backup' then refuses ("restore first then backup"). Restore pristine
     # files first in that case, then backup + apply as usual.
     Invoke-PruneStaleExtensions
-    $backupDir = Join-Path $script:UserDataPath 'Backup'
-    if (Test-Path -LiteralPath $backupDir) {
-        Write-Host 'Previous install detected, restoring pristine Spotify files...' -ForegroundColor Cyan
-        $code = Invoke-Sp @('restore')
-        if ($code -ne 0) { throw "spicetify restore failed with exit code $code." }
+    # Restore pristine files if a previous patch is in place. If Spotify is
+    # already stock (e.g. it auto-updated itself, wiping the patch), restore
+    # refuses with "stock state"/"mismatched" -- that is fine, backup below
+    # will snapshot the current files (clearing the stale backup itself).
+    $r = Get-SpOutput @('restore')
+    $nothingToRestore = ($r.ExitCode -ne 0) -and ($r.Output -match 'stock state|mismatched|no backup|nothing to restore|does not exist')
+    if ($r.ExitCode -ne 0 -and -not $nothingToRestore) { throw "spicetify restore failed with exit code $($r.ExitCode).`n$($r.Output)" }
+    if ($r.ExitCode -eq 0) {
+        Write-Host 'Previous install detected, restored pristine Spotify files.' -ForegroundColor Cyan
+    } else {
+        Write-Host 'Spotify is already stock (probably auto-updated), skipping restore.' -ForegroundColor Yellow
     }
     Write-Host 'Running backup...' -ForegroundColor Cyan
     $code = Invoke-Sp @('backup')
