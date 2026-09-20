@@ -47,8 +47,16 @@ function Invoke-Sp {
     $full += $SpArgs
     # Capture stdout/stderr so it does NOT leak into the function's output stream
     # (otherwise callers get an array instead of the exit code). Echo via Write-Host.
-    $output = (& $spicetifyExe @full 2>&1 | Out-String)
-    $code = $LASTEXITCODE
+    # NOTE: $ErrorActionPreference must be 'Continue' here, otherwise stderr lines
+    # from the native exe become terminating NativeCommandError under 'Stop'.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = (& $spicetifyExe @full 2>&1 | Out-String)
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
     if (-not [string]::IsNullOrWhiteSpace($output)) { Write-Host $output.TrimEnd() }
     return $code
 }
@@ -58,8 +66,15 @@ function Get-SpOutput {
     $full = @()
     if ($script:UseBypass) { $full += '--bypass-admin' }
     $full += $SpArgs
-    $out = (& $spicetifyExe @full 2>&1 | Out-String).Trim()
-    return @{ Output = $out; ExitCode = $LASTEXITCODE }
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = (& $spicetifyExe @full 2>&1 | Out-String).Trim()
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    return @{ Output = $out; ExitCode = $code }
 }
 
 # --- Checks (no abort on admin, unlike official installer) ---
